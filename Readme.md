@@ -6,6 +6,7 @@ Vamos a generar una aplicación que hará de API Rest al estilo de un microservi
 
 - [Springboot](https://spring.io/), como framework de Java.
 - [MySQL](https://www.mysql.com/), como motor de base de datos.
+- [Docker](https://www.docker.com/), como solución de virtualización.
 - [Maven](https://maven.apache.org/), como software de construcción de proyecto.
 - [Swagger](https://swagger.io/), para documentar la API.
 - [Postman](https://www.postman.com/), como plataforma para consumir una API.
@@ -14,6 +15,41 @@ Vamos a generar una aplicación que hará de API Rest al estilo de un microservi
 
 - [http://localhost:8095/](http://localhost:8095/), URL de entrada a la aplicación.
 - [http://localhost:8095/swagger-ui.html](http://localhost:8095/swagger-ui.html), URL de la documentación.
+
+
+## MySQL en Docker
+
+```
+    $ docker run -d -p 33060:3306 --name mysql-db  -e MYSQL_ROOT_PASSWORD=temporal --mount src=mysql-db-data,dst=/var/lib/mysql mysql
+```
+
+```
+    $ docker exec -it mysql-db mysql -p
+```
+
+```
+    create database microservicios;
+```
+ 
+En el _application.properties_, establecer:
+
+```properties
+...
+spring.datasource.url=jdbc:mysql://dockerhost:33060/microservicios
+spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+spring.datasource.username=root
+spring.datasource.password=temporal
+...
+```
+
+En la primera ejecución será necesario crear la tabla, para ello descomentar, en el fichero _application.properties_:
+
+```properties
+...
+# spring.jpa.hibernate.ddl-auto=create
+...
+```
+
 
 ## Estructura del proyecto
 
@@ -131,7 +167,7 @@ Añadimos el método:
 ````java
 @RequestMapping(value="/updateSalary", method = RequestMethod.PATCH)
 @ApiResponses(value = {
-        @ApiResponse(code = 202, message = "Se ha actualizaco el empleado"),
+        @ApiResponse(code = 202, message = "Se ha actualizado el empleado"),
         @ApiResponse(code = 404, message = "No existe un empleado con ese id")
 })
 public ResponseEntity actualizarSalarioEmpleado(@RequestBody ActualizarSalarioEmpleadoPeticionDto actualizarSalarioEmpleadoPeticionDto){
@@ -166,13 +202,13 @@ public class NuevoEmpleadoConSalarioPeticionDto implements Serializable {
 Creamos el método:
 
 ````java
-@RequestMapping(value="/addConSalario", method = RequestMethod.POST)
+@RequestMapping(value="/addWithSalary", method = RequestMethod.POST)
 @ApiResponses(value = {
         @ApiResponse(code = 202, message = "Se ha insertado el empleado con el salario enviado"),
         @ApiResponse(code = 409, message = "Ya existe un empleado con ese nombre")
 })
 public ResponseEntity<Empleado> insertarEmpleadoConSalario(@RequestBody NuevoEmpleadoConSalarioPeticionDto nuevoEmpleadoConSalarioDto) {
-        Empleado empleado = empService.obtenerEmpleado(nuevoEmpleadoConSalarioDto.getNombre());
+        Empleado empleado = empService.obtenerEmpleadoPorNombre(nuevoEmpleadoConSalarioDto.getNombre());
         if (empleado == null) {
             empleado = empService.insertarEmpleado(nuevoEmpleadoConSalarioDto.getNombre(), nuevoEmpleadoConSalarioDto.getSalario());
             return ResponseEntity.ok(empleado);
@@ -183,23 +219,33 @@ public ResponseEntity<Empleado> insertarEmpleadoConSalario(@RequestBody NuevoEmp
 }
 ````
 
-### Listar empleados por nombre o por id
+### Listar empleados por nombre y por id
 
 ````java
     @RequestMapping(value="/getById/{id}", method = RequestMethod.GET)
     @ApiResponses(value = {
             @ApiResponse(code = 404, message = "No existe un empleado con ese id")
     })
-    public Empleado obtenerEmpleadoPorId(@PathVariable int id) {
-        return empService.obtenerEmpleado(id);
+    public ResponseEntity<Empleado> obtenerEmpleadoPorId(@PathVariable int id) {
+        Empleado empleado = empService.obtenerEmpleadoPorId(id);
+        if (empleado == null){
+            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
+        } else {
+            return ResponseEntity.ok(empleado);
+        }
     }
 
     @RequestMapping(value="/getByName/{nombre}", method = RequestMethod.GET)
     @ApiResponses(value = {
             @ApiResponse(code = 404, message = "No existe un empleado con ese nombre")
     })
-    public Empleado obtenerEmpleadoPorNombre(@PathVariable int nombre) {
-        return empService.obtenerEmpleado(nombre);
+    public ResponseEntity<Empleado> obtenerEmpleadoPorNombre(@PathVariable String nombre) {
+        Empleado empleado = empService.obtenerEmpleadoPorNombre(nombre);
+        if (empleado == null){
+            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
+        } else {
+            return ResponseEntity.ok(empleado);
+        }
     }
 ````
 
@@ -241,10 +287,18 @@ Lo importamos:
 Creamos el método:
 
 ````java
-	@RequestMapping(value="/getSinSalario/{id}", method = RequestMethod.GET)
-	public ResponseEntity<EmpleadoSinSalarioRespuestaDto> obtenerEmpleadoSinSalario(@PathVariable int id) {
-		Empleado empleado = empService.obtenerEmpleado(id);
-		EmpleadoSinSalarioRespuestaDto empleadoSinSalarioDto = empleadoConverter.convertToEmpleadoResponseDto(empleado);
-		return ResponseEntity.ok(empleadoSinSalarioDto);
-	}
+    @RequestMapping(value="/getWithOutSalary/{id}", method = RequestMethod.GET)
+    @ApiResponses(value = {
+            @ApiResponse(code = 404, message = "No existe un empleado con ese id")
+    })
+    public ResponseEntity<EmpleadoSinSalarioRespuestaDto> obtenerEmpleadoSinSalario(@PathVariable int id) {
+        Empleado empleado = empService.obtenerEmpleadoPorId(id);
+        if (empleado == null) {
+            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
+        }
+        else {
+            EmpleadoSinSalarioRespuestaDto empleadoSinSalarioDto = empleadoConverter.convertToEmpleadoResponseDto(empleado);
+            return ResponseEntity.ok(empleadoSinSalarioDto);
+        }
+    }
 ````
